@@ -1,0 +1,68 @@
+[project]
+name = "fastcraft"
+version = "0.1.0"
+description = "Simulator for a water-fueled nuclear spacecraft"
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    "numpy>=2.5.4",
+    "openai>=3.42.1",
+    "pyqtgraph>=0.14.0",
+    "pyside6>=6.12.0",
+    "pyvista>=0.49.2",
+    "ruamel-yaml>=0.19.1",
+    "scipy>=1.18.1",
+    "skyfield>=1.55",
+]
+
+[project.scripts]
+fastcraft = "fastcraft.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fastcraft"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["fastcraft", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fastcraft"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["fastcraft"]
+exclude = ["fastcraft/gui"]
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "skyfield", "skyfield.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["fastcraft.gui", "fastcraft.gui.*"]
+follow_imports = "skip"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

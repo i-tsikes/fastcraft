@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# fastcraft local data: kernels, playback caches, and optional project settings
+fastcraft.settings.yaml
+*.bsp
+*.npz
