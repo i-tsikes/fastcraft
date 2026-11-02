@@ -26,6 +26,7 @@ Before declaring a task complete, you MUST execute these commands in order and e
 ## 4. Operational Boundaries
 
 ### ALWAYS DO
+- Base all work on the "dev" branch unless instructed otherwise, and submit pull requests against that branch.
 - Write comprehensive unit tests in the `tests/` directory for any new logic or bug fixes.
 - Run the full test suite before proposing a code modification or pull request.
 - Ensure all tool calls are idempotent.
