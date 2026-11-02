@@ -235,7 +235,7 @@ PySide6 main window:
 ## 8. Assistant
 
 A dock panel. The user types a question. The request to OpenRouter is chat completions on `https://openrouter.ai/api/v1`, model chosen in settings (a default is set at implementation). The system prompt says the assistant is an engineering aide, that it must not invent file fields outside section 3, and that edits are a JSON Patch in a fenced block. The user message includes the open craft YAML, the open scenario YAML, and a short result summary if a cache exists (duration, final mass, final radius, propellant used). It does not include the full trajectory.
-
+adding four(?) 
 The API key is `OPENROUTER_API_KEY` or a gitignored local settings file. It is never written into the repo, a craft file, or a scenario file. The panel has no tool that calls `propagate`. Applying a patch updates the in-memory document only.
 
 ## 9. Non-goals
