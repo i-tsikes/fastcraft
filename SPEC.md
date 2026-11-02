@@ -34,7 +34,7 @@ tests/
 
 A CLI entry point calls `propagate` on a scenario path and writes the result cache. Tests use that path and do not start Qt.
 
-Dependencies: Python 3.14, the newest release with VTK wheels (PyVista needs them; 3.15 is unsupported until those wheels exist), NumPy, SciPy, Astropy or Skyfield (one, chosen at implementation; the ephemeris module hides which), ruamel.yaml, PySide6, pyqtgraph, PyVista, and an OpenAI-compatible HTTP client for OpenRouter. JPL DE kernel files are downloaded by the user and referenced by path. They are not committed.
+Dependencies: Python 3.14, NumPy, SciPy, Astropy or Skyfield (one, chosen at implementation; the ephemeris module hides which), ruamel.yaml, PySide6, pyqtgraph, PyVista, and an OpenAI-compatible HTTP client for OpenRouter. 3.14 is the newest release with VTK wheels, which PyVista needs. 3.15 is not supported until those wheels exist. JPL DE kernel files are downloaded by the user and referenced by path. They are not committed.
 
 ## 2. Units and frames
 
@@ -115,11 +115,10 @@ epoch: "2035-04-01T00:00:00Z"
 frame: heliocentric_ecliptic_j2000
 bodies: [sun, earth, mars]
 initial:
-  # One of relative_to or heliocentric.
-  relative_to: earth
-  altitude_m: 400000.0
-  speed_m_per_s: 0.0          # inertial, added to the body's velocity
-  flight_path_deg: 0.0
+  # GUI default. Velocity is computed, not typed.
+  mode: earth_circular_equatorial
+  agl_m: 400000.0
+  longitude_deg: 0.0          # east, Earth-fixed at epoch; optional
   propellant:
     water_kg: 0.0
     lh2_kg: 0.0
@@ -137,6 +136,12 @@ segments:
     law: velocity             # thrust along inertial velocity
 electrolysis: on              # on or off for the whole scenario in v1
 ```
+
+v1 flights start in Earth orbit with the Ship stage already docked. Starship dry mass and landing propellant are always in the initial mass. There is no undocked Ship and no rendezvous.
+
+The GUI default initial state is `earth_circular_equatorial`. The user sets altitude above the ground. Radius is the WGS84 equatorial radius (6378137 m) plus `agl_m`. Speed relative to Earth is `sqrt(mu_earth / radius)`, due east in the equatorial plane. The heliocentric state is Earth’s inertial position and velocity at `epoch` plus that relative state. `longitude_deg` defaults to 0 east. The loader rejects any `agl_m` below 100000 m (100 km).
+
+A free-form initial state remains for tests and is not the GUI default. It uses `mode: heliocentric` with `position_m` and `velocity_m_per_s` in the integration frame. The GUI does not offer it on a new scenario.
 
 Segment types:
 
@@ -194,6 +199,7 @@ PySide6 main window:
 
 - File menu: new, open, save, and save-as for the active craft or scenario.
 - Editors for the fields in section 3. Invalid documents show the validator message and cannot run.
+- New scenarios open on a circular equatorial Earth orbit. One altitude-above-ground field sets it. The window shows the computed speed and does not ask for a velocity. Starship is docked. There is no control to undock it in v1.
 - Run action, with a busy indicator. Integration runs off the UI thread. Cancel sets a flag the integrator checks between segments.
 - Recent files list.
 
@@ -213,4 +219,5 @@ The API key is `OPENROUTER_API_KEY` or a gitignored local settings file. It is n
 - Atmosphere, entry, landing, oblateness, radiation pressure, or relativity.
 - Science-grade ephemerides or flight-software guidance.
 - The assistant commanding the integrator or saving files on its own.
+- Docking, undocking, or a Ship that is not already attached at epoch.
 - CAD, structural analysis, and radiation-dose transport. A water sheath around the crew cabin is a later mass and geometry note, not a v1 model.
