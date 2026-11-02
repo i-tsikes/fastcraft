@@ -228,9 +228,9 @@ PySide6 main window:
 - Initiate. If the open craft or scenario is missing or invalid, an alert lists the problems and nothing runs. If it is valid, integration starts off the UI thread and the mission view opens. Cancel sets a flag the integrator checks between segments.
 - Recent files list.
 
-Mission view, 2D, top-down heliocentric. Earth is a blue disk. Mars is a red disk scaled to Earth. The Sun is a yellow disk twice the drawn diameter of Earth, not to physical scale. Orbits are fine gray polylines sampled from the kernel. Axes are scaled together so the picture is not stretched. The Hauler is a ➤ glyph. Hydrolox firing draws one blue exhaust plume about the size of the glyph, behind it. Electric firing, hydrogen or oxygen, draws three shorter blue lines behind it. On a deceleration the glyph rotates so the exhaust stays opposite the thrust. Orientation changes assume cold-gas thrusters: the glyph turns, and v1 spends no propellant on them.
+Mission view, 2D, top-down heliocentric. Earth is a blue disk. Mars is a red disk scaled to Earth. The Sun is a yellow disk twice the drawn diameter of Earth, not to physical scale. Orbits are fine gray polylines sampled from the kernel. Axes are scaled together so the picture is not stretched. The Hauler is a ➤ glyph. A fine white polyline trails the Hauler and is drawn under the glyph and the exhaust so the plume covers the line where they overlap. Hydrolox firing draws one blue exhaust plume about the size of the glyph, behind it. Electric firing, hydrogen or oxygen, draws three shorter blue lines behind it. On a deceleration the glyph rotates so the exhaust stays opposite the thrust. Orientation changes assume cold-gas thrusters: the glyph turns, and v1 spends no propellant on them.
 
-A movable panel shows elapsed time as `1d 2h 47m 33s`, plus the Hauler’s speed and its range from Earth and from Mars.
+A movable panel shows elapsed time as `1d 2h 47m 33s`, plus the Hauler’s speed, its acceleration, and its range from Earth and from Mars.
 
 While a run is computing, the view updates as fast as new states arrive. Playback replays a saved `.npz` at a user-set rate of simulation time per wall second, so a 100-day flight can play in about 30 seconds. Playback does not re-integrate.
 
