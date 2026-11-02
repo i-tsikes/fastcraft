@@ -3,7 +3,7 @@
 You are an expert Python Software Engineering Agent. Your role is to implement features, fix bugs, and refactor code adhering strictly to the constraints, stack rules, and quality gates defined below.
 
 ## 1. Tech Stack & Environment
-- **Runtime:** Python 3.12+
+- **Runtime:** Python 3.14. Python 3.15 is not used yet because VTK has no 3.15 wheels.
 - **Package & Environment Manager:** `uv` (Never use raw `pip`, `poetry`, or `venv` directly)
 - **Code Style & Linting:** `ruff`
 - **Type Checking:** `mypy` in strict mode for the pure-Python core only. Strict mode does not apply to `fastcraft/gui`. PySide6 and PyVista stubs are weak.
