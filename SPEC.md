@@ -139,7 +139,7 @@ electrolysis: on              # on or off for the whole scenario in v1
 
 v1 flights start in Earth orbit with the Ship stage already docked. Starship dry mass and landing propellant are always in the initial mass. There is no undocked Ship and no rendezvous.
 
-The GUI default initial state is `earth_circular_equatorial`. The user sets altitude above the ground. Radius is the WGS84 equatorial radius (6378137 m) plus `agl_m`. Speed relative to Earth is `sqrt(mu_earth / radius)`, due east in the equatorial plane. The heliocentric state is Earth’s inertial position and velocity at `epoch` plus that relative state. `longitude_deg` defaults to 0 east. The loader rejects a non-positive `agl_m`.
+The GUI default initial state is `earth_circular_equatorial`. The user sets altitude above the ground. Radius is the WGS84 equatorial radius (6378137 m) plus `agl_m`. Speed relative to Earth is `sqrt(mu_earth / radius)`, due east in the equatorial plane. The heliocentric state is Earth’s inertial position and velocity at `epoch` plus that relative state. `longitude_deg` defaults to 0 east. The loader rejects any `agl_m` below 100000 m (100 km).
 
 A free-form initial state remains for tests and is not the GUI default. It uses `mode: heliocentric` with `position_m` and `velocity_m_per_s` in the integration frame. The GUI does not offer it on a new scenario.
 
