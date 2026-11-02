@@ -34,7 +34,7 @@ tests/
 
 A CLI entry point calls `propagate` on a scenario path and writes the result cache. Tests use that path and do not start Qt.
 
-Dependencies: Python 3.12, NumPy, SciPy, Astropy or Skyfield (one, chosen at implementation; the ephemeris module hides which), ruamel.yaml, PySide6, pyqtgraph, PyVista, and an OpenAI-compatible HTTP client for OpenRouter. JPL DE kernel files are downloaded by the user and referenced by path. They are not committed.
+Dependencies: Python 3.14, the newest release with VTK wheels (PyVista needs them; 3.15 is unsupported until those wheels exist), NumPy, SciPy, Astropy or Skyfield (one, chosen at implementation; the ephemeris module hides which), ruamel.yaml, PySide6, pyqtgraph, PyVista, and an OpenAI-compatible HTTP client for OpenRouter. JPL DE kernel files are downloaded by the user and referenced by path. They are not committed.
 
 ## 2. Units and frames
 
