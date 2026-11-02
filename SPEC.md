@@ -90,6 +90,10 @@ engines:
     isp_s: 0.0
   mhd:
     count: 9                   # six around, three center, schematic only
+    thrust_n: 0.0              # each, hydrogen
+    isp_s: 0.0
+  oxygen:                      # optional; omit the block to leave them off
+    count: 0
     thrust_n: 0.0              # each
     isp_s: 0.0
 geometry:                      # schematic, meters, not CAD
@@ -100,6 +104,10 @@ notes: ""
 ```
 
 Loaded propellant at the start of a flight lives on the scenario, and it cannot exceed these capacities. `landing_propellant_kg` is a reserved mass. v1 does not burn it and does not let electrolysis or Hauler engines draw from it.
+
+`dry_mass_kg` is one number. v1 does not split it across reactor, tanks, radiators, or engines. A later enhancement can assign mass to those parts so trades show where the dry mass went.
+
+Oxygen electric thrusters are optional. Omit `engines.oxygen`, or set `count` to 0, and the craft has none. When present, their parameters match the hydrogen MHD set: count, thrust per engine, and specific impulse. They consume LOX only. Whenever hydrogen MHD is firing, they fire at the same time at 8 kg oxygen per 1 kg hydrogen, so the tanks stay on the hydrolox mixture and net acceleration rises. Throttle drops if LOX or thrust authority runs out. Venting remains only if the LOX tank is full and the oxygen thrusters cannot take the excess. Mass flow is `thrust / (Isp * g0)`.
 
 Electrolysis availability: while `electric_w` is positive and water remains, the scenario may turn electrolysis on. The rate is at most `max_kg_per_s`. Products split by mass fraction 1/9 hydrogen and 8/9 oxygen. Power and radiator limits are recorded and checked (`electric_w` must be below `reactor_thermal_w`, and waste heat `reactor_thermal_w - electric_w` must be within `radiator_reject_w`). v1 does not integrate a thermal network.
 
@@ -120,36 +128,52 @@ initial:
   agl_m: 400000.0
   longitude_deg: 0.0          # east, Earth-fixed at epoch; optional
   propellant:
-    water_kg: 0.0
+    water_kg: 0.0             # full tanks at outbound departure
     lh2_kg: 0.0
     lox_kg: 0.0
-segments:
-  - type: coast
-    duration_s: 86400.0
-  - type: burn
-    engine: hydrolox          # or mhd
-    duration_s: 600.0
-    direction: prograde       # prograde, retrograde, or a unit vector in the frame
-  - type: steer
-    engine: mhd
-    duration_s: 864000.0
-    law: velocity             # thrust along inertial velocity
+arrival:
+  body: mars
+  agl_m: 400000.0             # nearly circular orbit; Ship release altitude
+ship: docked                  # outbound. Return: none, empty, or loaded
+cargo_kg: 0.0                 # only when ship is loaded
+burns:
+  - role: departure           # hydrolox
+    duration_s: 0.0
+    throttle: 1.0             # 0 to 1, scales thrust and mass flow
+  - role: accelerate          # hydrogen MHD, plus optional oxygen
+    duration_s: 0.0
+    throttle: 1.0
+    oxygen: auto              # auto or off
+  - role: decelerate
+    duration_s: 0.0
+    throttle: 1.0
+    oxygen: auto
+  - role: insertion           # hydrolox
+    duration_s: 0.0
+    throttle: 1.0
 electrolysis: on              # on or off for the whole scenario in v1
 ```
 
-v1 flights start in Earth orbit with the Ship stage already docked. Starship dry mass and landing propellant are always in the initial mass. There is no undocked Ship and no rendezvous.
+Outbound flights start in Earth orbit with the Ship stage already docked and tanks full. A return is a separate scenario and may set `ship` to `none`, `empty`, or `loaded`. `loaded` adds `cargo_kg` to Starship dry mass. `empty` is Starship dry mass and no cargo. `none` omits Ship mass. There is no rendezvous. Landing propellant stays reserved when a Ship is attached.
 
 The GUI default initial state is `earth_circular_equatorial`. The user sets altitude above the ground. Radius is the WGS84 equatorial radius (6378137 m) plus `agl_m`. Speed relative to Earth is `sqrt(mu_earth / radius)`, due east in the equatorial plane. The heliocentric state is Earth’s inertial position and velocity at `epoch` plus that relative state. `longitude_deg` defaults to 0 east. The loader rejects any `agl_m` below 100000 m (100 km).
 
 A free-form initial state remains for tests and is not the GUI default. It uses `mode: heliocentric` with `position_m` and `velocity_m_per_s` in the integration frame. The GUI does not offer it on a new scenario.
 
-Segment types:
+The four burns run in order, with a coast in any gap the durations leave. Throttle scales thrust and mass flow from 0 to 1. Hydrolox departure and insertion thrust is along the velocity or anti-velocity direction, frozen at the start of that burn. MHD acceleration thrusts along inertial velocity. MHD deceleration thrusts against it. Thrust drops to zero early if the required propellant is exhausted. Hydrolox consumes LH2 and LOX at a 1:8 mass ratio and shuts down when either tank hits zero. Hydrogen MHD consumes LH2 only. Optional oxygen thrusters consume LOX only. Whenever hydrogen MHD is firing, they fire at the same time at 8 kg oxygen per 1 kg hydrogen, so the tanks stay on the hydrolox mixture and net acceleration rises. Their throttle drops if LOX or thrust authority runs out. Mass flow is `thrust / (Isp * g0)` with `g0 = 9.80665` m/s^2, summed over engines that are firing.
 
-- `coast`. No thrust. Gravity and, if on, electrolysis only.
-- `burn`. Constant thrust in a fixed direction: `prograde` or `retrograde` frozen at segment start, or `vector: [x, y, z]` as a frame unit vector.
-- `steer`. Thrust along the current inertial velocity (`law: velocity`). This is the v1 steering law. Anything else is rejected.
+Mars is never moved. Its state comes from the kernel. The user sets `arrival.agl_m`. The GUI offers a departure-date pick list before any full-calendar search with the integrator. Over one Earth-Mars synodic period, step the date by a few days. Flight time is the sum of the four burn durations. Keep the dates where Mars (or Earth, on a return) is near the arrival direction, and show the best handful with the date and the estimated flight time. After the user picks one, a one-dimensional search shifts `epoch` by days, runs the saved burns, and scores miss distance plus remaining hydrolox needed to circularize at `arrival.agl_m`. The best epoch is written back only when the user accepts it. The search does not retune durations, throttles, or burn order.
 
-Segments run in order. Duration is the segment length. Thrust drops to zero early if the required propellant is exhausted. Hydrolox consumes LH2 and LOX in the engine's mixture implied by stoichiometry (mass ratio 1:8). If either tank hits zero, that engine shuts down. MHD consumes LH2 only. Mass flow is `thrust / (Isp * g0)` with `g0 = 9.80665` m/s^2, summed over engines that are still fed.
+### 3.3 Trip presets
+
+The burn duration and throttle fields are what the integrator runs. Presets only fill them. The user can edit any of them afterward.
+
+- **Fastest.** Search those durations and throttles, tanks full, Ship docked, and keep the set with the shortest arrival. Hydrolox is departure and insertion. Hydrogen MHD is acceleration and deceleration. If the craft has oxygen thrusters, the search may set `oxygen: auto` on the MHD burns. Write the winning values into the fields.
+- **Return, no Ship.** Same search toward Earth, `ship: none`, leaving at least the propellant that mirrored four-burn return needs.
+- **Return, empty Ship.** Same, with empty-Ship dry mass in that reserve.
+- **Return, loaded Ship.** Same, plus the `cargo_kg` the user entered.
+
+Fastest may spend everything except the return reserve when a return preset is selected. A return preset will not fill in a plan below that reserve. The epoch pick list still runs after the fields are set.
 
 ## 4. Ephemeris and forces
 
@@ -199,7 +223,8 @@ PySide6 main window:
 
 - File menu: new, open, save, and save-as for the active craft or scenario.
 - Editors for the fields in section 3. Invalid documents show the validator message and cannot run.
-- New scenarios open on a circular equatorial Earth orbit. One altitude-above-ground field sets it. The window shows the computed speed and does not ask for a velocity. Starship is docked. There is no control to undock it in v1.
+- New outbound scenarios open on a circular equatorial Earth orbit. One altitude-above-ground field sets it. The window shows the computed speed and does not ask for a velocity. Starship starts docked.
+- Four burn rows, each with duration and throttle. Preset buttons: Fastest, Return with no Ship, Return with an empty Ship, and Return with a loaded Ship. The loaded preset asks for cargo mass. Choosing a preset fills the duration and throttle fields. The user can edit those fields after. A departure-date pick list sits beside them. Accepting a refined epoch writes `epoch` and nothing else.
 - Run action, with a busy indicator. Integration runs off the UI thread. Cancel sets a flag the integrator checks between segments.
 - Recent files list.
 
@@ -210,7 +235,7 @@ PySide6 main window:
 ## 8. Assistant
 
 A dock panel. The user types a question. The request to OpenRouter is chat completions on `https://openrouter.ai/api/v1`, model chosen in settings (a default is set at implementation). The system prompt says the assistant is an engineering aide, that it must not invent file fields outside section 3, and that edits are a JSON Patch in a fenced block. The user message includes the open craft YAML, the open scenario YAML, and a short result summary if a cache exists (duration, final mass, final radius, propellant used). It does not include the full trajectory.
-
+adding four(?) 
 The API key is `OPENROUTER_API_KEY` or a gitignored local settings file. It is never written into the repo, a craft file, or a scenario file. The panel has no tool that calls `propagate`. Applying a patch updates the in-memory document only.
 
 ## 9. Non-goals
@@ -219,5 +244,6 @@ The API key is `OPENROUTER_API_KEY` or a gitignored local settings file. It is n
 - Atmosphere, entry, landing, oblateness, radiation pressure, or relativity.
 - Science-grade ephemerides or flight-software guidance.
 - The assistant commanding the integrator or saving files on its own.
-- Docking, undocking, or a Ship that is not already attached at epoch.
+- Docking or a rendezvous. A return may omit the Ship. It cannot meet one in flight.
+- Splitting dry mass by component. v1 keeps a single dry mass.
 - CAD, structural analysis, and radiation-dose transport. A water sheath around the crew cabin is a later mass and geometry note, not a v1 model.
