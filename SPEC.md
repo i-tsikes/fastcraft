@@ -56,7 +56,7 @@ The integration frame is heliocentric ecliptic J2000, Cartesian meters and meter
 
 ruamel.yaml reads and writes every document. Key order is stable. Comments round-trip. Each file has `schema`. Unknown fields are rejected. The GUI saves only when the user asks.
 
-Run results are not inside the scenario. They live in a cache directory next to it (`<scenario-stem>.run/`), as a NumPy `.npz` plus a small JSON index of column names. Deleting that directory is safe. Analysis reads the cache.
+Run results are not inside the scenario. Each run writes one playback file next to it, named `{scenario stem}-{YYYY-MM-DD}-{HHMMSS}.npz`. The stamp is local 24-hour wall time when the run is saved, zero-filled, so 2:01:09 AM on 2 Nov 2026 is `scenario462-2026-11-02-020109.npz`. The file holds one array per result column plus a JSON string with the scenario name, epoch, and column list. Playback reads that file and does not re-integrate. Deleting it is safe. Analysis reads it.
 
 The assistant reads the YAML text. When it proposes an edit, it returns a JSON Patch (RFC 6902) against the parsed document. The app applies the patch in memory and writes YAML only after the user saves.
 
@@ -107,7 +107,7 @@ Loaded propellant at the start of a flight lives on the scenario, and it cannot 
 
 `dry_mass_kg` is one number. v1 does not split it across reactor, tanks, radiators, or engines. A later enhancement can assign mass to those parts so trades show where the dry mass went.
 
-Oxygen electric thrusters are optional. Omit `engines.oxygen`, or set `count` to 0, and the craft has none. When present, their parameters match the hydrogen MHD set: count, thrust per engine, and specific impulse. They consume LOX only. Whenever hydrogen MHD is firing, they fire at the same time at 8 kg oxygen per 1 kg hydrogen, so the tanks stay on the hydrolox mixture and net acceleration rises. Throttle drops if LOX or thrust authority runs out. Venting remains only if the LOX tank is full and the oxygen thrusters cannot take the excess. Mass flow is `thrust / (Isp * g0)`.
+Oxygen electric thrusters are optional. Omit `engines.oxygen`, or set `count` to 0, and the craft has none. When present, their parameters match the hydrogen MHD set: count, thrust per engine, and specific impulse. They consume LOX only. Whenever hydrogen MHD is firing, they fire at the same time with a mass-flow ratio of 8 kg oxygen per 1 kg hydrogen, so the cryo tanks stay on the hydrolox mixture and net acceleration rises. Mass flow is `thrust / (Isp * g0)`. Throttle drops if LOX or thrust authority runs out. Venting remains only if the LOX tank is full and the oxygen thrusters cannot take the excess.
 
 Electrolysis availability: while `electric_w` is positive and water remains, the scenario may turn electrolysis on. The rate is at most `max_kg_per_s`. Products split by mass fraction 1/9 hydrogen and 8/9 oxygen. Power and radiator limits are recorded and checked (`electric_w` must be below `reactor_thermal_w`, and waste heat `reactor_thermal_w - electric_w` must be within `radiator_reject_w`). v1 does not integrate a thermal network.
 
@@ -160,7 +160,7 @@ The GUI default initial state is `earth_circular_equatorial`. The user sets alti
 
 A free-form initial state remains for tests and is not the GUI default. It uses `mode: heliocentric` with `position_m` and `velocity_m_per_s` in the integration frame. The GUI does not offer it on a new scenario.
 
-The four burns run in order, with a coast in any gap the durations leave. Throttle scales thrust and mass flow from 0 to 1. Hydrolox departure and insertion thrust is along the velocity or anti-velocity direction, frozen at the start of that burn. MHD acceleration thrusts along inertial velocity. MHD deceleration thrusts against it. Thrust drops to zero early if the required propellant is exhausted. Hydrolox consumes LH2 and LOX at a 1:8 mass ratio and shuts down when either tank hits zero. Hydrogen MHD consumes LH2 only. Optional oxygen thrusters consume LOX only. Whenever hydrogen MHD is firing, they fire at the same time at 8 kg oxygen per 1 kg hydrogen, so the tanks stay on the hydrolox mixture and net acceleration rises. Their throttle drops if LOX or thrust authority runs out. Mass flow is `thrust / (Isp * g0)` with `g0 = 9.80665` m/s^2, summed over engines that are firing.
+The four burns run in order, with a coast in any gap the durations leave. Throttle scales thrust and mass flow from 0 to 1. Hydrolox departure and insertion thrust is along the velocity or anti-velocity direction, frozen at the start of that burn. MHD acceleration thrusts along inertial velocity. MHD deceleration thrusts against it. Thrust drops to zero early if the required propellant is exhausted. Hydrolox consumes LH2 and LOX at a 1:8 mass ratio and shuts down when either tank hits zero. Hydrogen MHD consumes LH2 only. Optional oxygen thrusters consume LOX only, and they fire with the hydrogen MHD burns at 8 kg oxygen per 1 kg hydrogen. Mass flow is `thrust / (Isp * g0)` with `g0 = 9.80665` m/s^2, summed over engines that are firing.
 
 Mars is never moved. Its state comes from the kernel. The user sets `arrival.agl_m`. The GUI offers a departure-date pick list before any full-calendar search with the integrator. Over one Earth-Mars synodic period, step the date by a few days. Flight time is the sum of the four burn durations. Keep the dates where Mars (or Earth, on a return) is near the arrival direction, and show the best handful with the date and the estimated flight time. After the user picks one, a one-dimensional search shifts `epoch` by days, runs the saved burns, and scores miss distance plus remaining hydrolox needed to circularize at `arrival.agl_m`. The best epoch is written back only when the user accepts it. The search does not retune durations, throttles, or burn order.
 
@@ -225,17 +225,23 @@ PySide6 main window:
 - Editors for the fields in section 3. Invalid documents show the validator message and cannot run.
 - New outbound scenarios open on a circular equatorial Earth orbit. One altitude-above-ground field sets it. The window shows the computed speed and does not ask for a velocity. Starship starts docked.
 - Four burn rows, each with duration and throttle. Preset buttons: Fastest, Return with no Ship, Return with an empty Ship, and Return with a loaded Ship. The loaded preset asks for cargo mass. Choosing a preset fills the duration and throttle fields. The user can edit those fields after. A departure-date pick list sits beside them. Accepting a refined epoch writes `epoch` and nothing else.
-- Run action, with a busy indicator. Integration runs off the UI thread. Cancel sets a flag the integrator checks between segments.
+- Initiate. If the open craft or scenario is missing or invalid, an alert lists the problems and nothing runs. If it is valid, integration starts off the UI thread and the mission view opens. Cancel sets a flag the integrator checks between segments.
 - Recent files list.
 
-2D: pyqtgraph. The user picks X and Y from the result columns (time, radius, speed, mass, each tank, thrust). A second cached run can be overlaid. The cursor time is shared with the 3D view.
+Mission view, 2D, top-down heliocentric. Earth is a blue disk. Mars is a red disk scaled to Earth. The Sun is a yellow disk twice the drawn diameter of Earth, not to physical scale. Orbits are fine gray polylines sampled from the kernel. Axes are scaled together so the picture is not stretched. The Hauler is a ➤ glyph. Hydrolox firing draws one blue exhaust plume about the size of the glyph, behind it. Electric firing, hydrogen or oxygen, draws three shorter blue lines behind it. On a deceleration the glyph rotates so the exhaust stays opposite the thrust. Orientation changes assume cold-gas thrusters: the glyph turns, and v1 spends no propellant on them.
+
+A movable panel shows elapsed time as `1d 2h 47m 33s`, plus the Hauler’s speed and its range from Earth and from Mars.
+
+While a run is computing, the view updates as fast as new states arrive. Playback replays a saved `.npz` at a user-set rate of simulation time per wall second, so a 100-day flight can play in about 30 seconds. Playback does not re-integrate.
+
+Plots: pyqtgraph. The user picks X and Y from the result columns (time, radius, speed, mass, each tank, thrust). A second saved run can be overlaid. The cursor time is shared with the 3D view.
 
 3D: PyVista in the same heliocentric frame. Body paths over the scenario window are polylines. The spacecraft path is a polyline. A marker sits at the cursor time. The vehicle glyph is schematic: aft core, central tank cylinder from `geometry`, two radiator wings of span `radiator_span_m`, four hydrolox bells outside the core, six MHD bells on a hexagon plus three at the center, and a Starship cone docked on the forward face. No mesh import.
 
 ## 8. Assistant
 
 A dock panel. The user types a question. The request to OpenRouter is chat completions on `https://openrouter.ai/api/v1`, model chosen in settings (a default is set at implementation). The system prompt says the assistant is an engineering aide, that it must not invent file fields outside section 3, and that edits are a JSON Patch in a fenced block. The user message includes the open craft YAML, the open scenario YAML, and a short result summary if a cache exists (duration, final mass, final radius, propellant used). It does not include the full trajectory.
-adding four(?) 
+
 The API key is `OPENROUTER_API_KEY` or a gitignored local settings file. It is never written into the repo, a craft file, or a scenario file. The panel has no tool that calls `propagate`. Applying a patch updates the in-memory document only.
 
 ## 9. Non-goals
