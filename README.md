@@ -2,7 +2,63 @@
 
 Simulator for fast spacecraft
 
+## What it does
+
+fastcraft is a desktop simulator for a water-fueled nuclear Hauler.
+A craft file describes the dry mass, tanks, docked Starship, reactor and
+radiator limits, electrolysis rate, and engines. A scenario file describes
+the epoch, the starting orbit, four burns, and how the Ship is carried.
+
+Initiate integrates those burns with a Cowell propagator and opens a mission
+view: a top-down heliocentric map, plots, and a schematic 3D Hauler. Playback
+reads a saved `.npz` file and does not integrate again. Presets fill burn
+duration and throttle. An assistant panel can propose YAML edits as a JSON
+Patch. The app writes a craft or scenario file only when you save.
+
+## Install
+
+Python 3.14 and [uv](https://docs.astral.sh/uv/) are required.
+
+```bash
+uv sync
+```
+
+## Run
+
+Open the desktop app:
+
+```bash
+uv run fastcraft
+```
+
+Propagate a scenario from the command line and write a playback file next to it:
+
+```bash
+uv run fastcraft examples/earth-mars.scenario.yaml
+```
+
+A local JPL Development Ephemeris kernel is optional. Set `FASTCRAFT_KERNEL`
+or choose the kernel in Settings. With no kernel, fastcraft uses an analytic
+Sun, Earth, and Mars and does not download one.
+
+The assistant calls an OpenAI-compatible chat endpoint at OpenRouter. Set
+`OPENROUTER_API_KEY`, or save a key in Settings. The key lives in
+`~/.config/fastcraft/settings.yaml`, never in the repository and never in a
+craft or scenario file.
+
+## Test
+
+```bash
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy fastcraft --exclude fastcraft/gui
+uv run pytest
+```
+
+Tests do not open a window and do not download a JPL kernel.
+
 ## Initial Goals
+
 
 - Simulate a water fueled nuclear spacecraft (Hauler)
   - ~1 GW advanced (90% enriched) nuclear reactor in aft position
