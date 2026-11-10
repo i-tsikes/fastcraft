@@ -45,6 +45,32 @@ from fastcraft.yamlio import DocumentError, dump_yaml, load_yaml, yaml_rt
 _RECENT_LIMIT = 8
 
 
+def find_default_craft() -> Path | None:
+    """`default.craft.yaml` in the working directory, or beside a source checkout."""
+    return _find_default("default.craft.yaml")
+
+
+def find_default_scenario() -> Path | None:
+    """`default.scenario.yaml` in the working directory, or beside a source checkout."""
+    return _find_default("default.scenario.yaml")
+
+
+def _find_default(filename: str) -> Path | None:
+    candidates = [
+        Path.cwd() / filename,
+        Path(__file__).resolve().parents[2] / filename,
+    ]
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_file():
+            return resolved
+    return None
+
+
 def _dump(data: object) -> str:
     buffer = StringIO()
     yaml_rt().dump(data, buffer)
@@ -77,10 +103,10 @@ class MainWindow(QMainWindow):
         self._scenario_dirty = False
         self._missions: list[MissionWindow] = []
         self._refine: RefineThread | None = None
+        self._startup_note = ""
         self.craft_form = CraftForm()
         self.scenario_form = ScenarioForm()
-        self.craft_form.load_data(new_craft())
-        self.scenario_form.load_data(new_scenario())
+        self.craft_form.load_requested.connect(self._load_craft_request)
         self.craft_form.changed.connect(self._craft_edited)
         self.scenario_form.changed.connect(self._scenario_edited)
         self.scenario_form.preset_requested.connect(self._preset)
@@ -109,7 +135,7 @@ class MainWindow(QMainWindow):
         self._assistant.patch_ready.connect(self._apply_assistant_patch)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._assistant)
         self._build_menu()
-        self._refresh_status()
+        self._load_startup_documents()
         self._retitle()
 
     def open_path(self, path: Path) -> None:
@@ -212,6 +238,8 @@ class MainWindow(QMainWindow):
         dump_yaml(self.craft_form.document(), target)
         self._craft_path = target
         self._craft_dirty = False
+        self.craft_form.set_file_path(str(target))
+        self._sync_craft_row()
         self._remember(target)
         self._retitle()
         self._refresh_status()
@@ -235,17 +263,83 @@ class MainWindow(QMainWindow):
             return False
         dump_yaml(self.scenario_form.document(), target)
         self._scenario_path = target
-        self.scenario_form.set_directory(target.parent)
         self._scenario_dirty = False
+        self.scenario_form.set_scenario_file(target.name)
         self._remember(target)
         self._retitle()
         self._refresh_status()
         return True
 
+    def _load_startup_documents(self) -> None:
+        """Load the default scenario, then the default craft, without marking either dirty."""
+        notes: list[str] = []
+        scenario_path = find_default_scenario()
+        scenario_data: Any = None
+        if scenario_path is None:
+            notes.append("default.scenario.yaml was not found.")
+            self.scenario_form.load_data(new_scenario())
+        else:
+            try:
+                scenario_data = load_yaml(scenario_path)
+            except DocumentError as exc:
+                notes.append(str(exc))
+                scenario_path = None
+                self.scenario_form.load_data(new_scenario())
+            else:
+                self.scenario_form.load_data(scenario_data)
+        self._load_startup_craft()
+        if scenario_path is not None and scenario_data is not None:
+            self._scenario_path = scenario_path
+            self._scenario_dirty = False
+            self.scenario_form.set_scenario_file(scenario_path.name)
+        else:
+            self.scenario_form.set_scenario_file("")
+        if self._startup_note:
+            notes.insert(0, self._startup_note)
+        self._startup_note = "\n".join(note for note in notes if note)
+        self.tabs.setCurrentWidget(self.craft_form)
+        self._refresh_status()
+
+    def _load_startup_craft(self) -> None:
+        path = find_default_craft()
+        if path is None:
+            self._craft_path = None
+            self.craft_form.load_data(new_craft())
+            self.craft_form.set_file_path("")
+            self._sync_craft_row()
+            self._startup_note = "default.craft.yaml was not found."
+            return
+        try:
+            data = load_yaml(path)
+        except DocumentError as exc:
+            self.craft_form.load_data(new_craft())
+            self._startup_note = str(exc)
+            return
+        self._startup_note = ""
+        self._set_craft(data, path)
+
+    def _load_craft_request(self, text: str) -> None:
+        path = Path(text).expanduser()
+        if not path.is_file():
+            QMessageBox.warning(self, "Open craft", f"Craft file not found:\n{path}")
+            self.craft_form.set_file_path(str(self._craft_path) if self._craft_path else "")
+            return
+        try:
+            data = load_yaml(path)
+        except DocumentError as exc:
+            QMessageBox.warning(self, "Open craft", str(exc))
+            return
+        self._startup_note = ""
+        self._set_craft(data, path)
+
     def _set_craft(self, data: Any, path: Path | None) -> None:
-        self.craft_form.load_data(data)
         self._craft_path = path
+        self.craft_form.load_data(data)
         self._craft_dirty = False
+        if self._scenario_path is not None:
+            self._scenario_dirty = True
+        self.craft_form.set_file_path("" if path is None else str(path))
+        self._sync_craft_row()
         self.tabs.setCurrentWidget(self.craft_form)
         self._retitle()
         self._refresh_status()
@@ -253,27 +347,12 @@ class MainWindow(QMainWindow):
     def _set_scenario(self, data: Any, path: Path | None) -> None:
         self.scenario_form.load_data(data)
         self._scenario_path = path
-        self.scenario_form.set_directory(None if path is None else path.parent)
         self._scenario_dirty = False
-        if path is not None and not self._craft_dirty:
-            self._load_linked_craft(data, path)
+        self.scenario_form.set_scenario_file("" if path is None else path.name)
+        self._sync_craft_row()
         self.tabs.setCurrentWidget(self.scenario_form)
         self._retitle()
         self._refresh_status()
-
-    def _load_linked_craft(self, data: Any, path: Path) -> None:
-        rel = str(data.get("craft", "")).strip() if isinstance(data, dict) else ""
-        if not rel:
-            return
-        craft_path = Path(rel)
-        if not craft_path.is_absolute():
-            craft_path = path.parent / craft_path
-        if not craft_path.is_file():
-            return
-        try:
-            self._set_craft(load_yaml(craft_path), craft_path)
-        except DocumentError:
-            return
 
     def _collect(self) -> tuple[Craft | None, Scenario | None, list[str]]:
         errors: list[str] = []
@@ -289,9 +368,10 @@ class MainWindow(QMainWindow):
         except DocumentError as exc:
             errors.extend(exc.errors)
         scenario: Scenario | None = None
-        craft_rel = str(self.scenario_form.document().get("craft", "")).strip()
-        if not craft_rel:
-            errors.append("scenario: craft path is empty")
+        if self._craft_path is None:
+            errors.append(
+                "Load a craft file on the Craft tab. Startup looks for default.craft.yaml."
+            )
         try:
             scenario = parse_scenario(
                 self.scenario_form.document(),
@@ -304,6 +384,8 @@ class MainWindow(QMainWindow):
 
     def _refresh_status(self) -> None:
         _craft, _scenario, errors = self._collect()
+        if self._startup_note:
+            errors = [self._startup_note, *errors]
         if errors:
             self.status.setText("\n".join(errors))
         else:
@@ -318,19 +400,6 @@ class MainWindow(QMainWindow):
                 "\n".join(errors) or "The craft or scenario is not valid.",
             )
             return
-        if self._scenario_path is None:
-            answer = QMessageBox.question(
-                self,
-                "Save scenario",
-                "Save the scenario so the playback file has a folder.",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
-            )
-            if answer != QMessageBox.StandardButton.Save or not self._save_scenario(None):
-                return
-            craft, scenario, errors = self._collect()
-            if craft is None or scenario is None or errors:
-                QMessageBox.warning(self, "Cannot initiate", "\n".join(errors))
-                return
         self.tabs.setCurrentWidget(self.scenario_form)
         ephemeris = open_ephemeris(scenario.epoch)
         window = MissionWindow(scenario, craft, ephemeris, self._scenario_path)
@@ -499,8 +568,17 @@ class MainWindow(QMainWindow):
             return
         save_settings(dialog.settings())
 
+    def _sync_craft_row(self) -> None:
+        """Scenario row: the craft's name, then the loaded file name."""
+        filename = "" if self._craft_path is None else self._craft_path.name
+        if not filename:
+            self.scenario_form.set_loaded_craft("", "")
+            return
+        self.scenario_form.set_loaded_craft(self.craft_form.name.text(), filename)
+
     def _craft_edited(self) -> None:
         self._craft_dirty = True
+        self._sync_craft_row()
         self._refresh_status()
 
     def _scenario_edited(self) -> None:
