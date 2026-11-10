@@ -400,19 +400,6 @@ class MainWindow(QMainWindow):
                 "\n".join(errors) or "The craft or scenario is not valid.",
             )
             return
-        if self._scenario_path is None:
-            answer = QMessageBox.question(
-                self,
-                "Save scenario",
-                "Save the scenario so the playback file has a folder.",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
-            )
-            if answer != QMessageBox.StandardButton.Save or not self._save_scenario(None):
-                return
-            craft, scenario, errors = self._collect()
-            if craft is None or scenario is None or errors:
-                QMessageBox.warning(self, "Cannot initiate", "\n".join(errors))
-                return
         self.tabs.setCurrentWidget(self.scenario_form)
         ephemeris = open_ephemeris(scenario.epoch)
         window = MissionWindow(scenario, craft, ephemeris, self._scenario_path)
