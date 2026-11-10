@@ -406,7 +406,7 @@ class ScenarioForm(QWidget):
         self._data: Any = None
         self._filling = False
         self._refined: datetime | None = None
-        self._craft_name = ""
+        self._craft_file = ""
         self.name = QLineEdit()
         self.craft_name = QLabel("—")
         self.epoch = QLineEdit()
@@ -550,10 +550,19 @@ class ScenarioForm(QWidget):
     def document(self) -> Any:
         return self._data
 
-    def set_craft_name(self, name: str) -> None:
-        """Show the loaded craft filename. The path stays on the Craft tab."""
-        self._craft_name = name
-        self.craft_name.setText(name if name else "—")
+    def set_loaded_craft(self, craft_name: str, filename: str) -> None:
+        """Show `Name (file.yaml)`. The scenario document keeps the filename."""
+        self._craft_file = filename
+        name = craft_name.strip()
+        if name and filename:
+            shown = f"{name} ({filename})"
+        elif filename:
+            shown = filename
+        elif name:
+            shown = name
+        else:
+            shown = "—"
+        self.craft_name.setText(shown)
 
     def load_data(self, data: Any) -> None:
         self._data = data
@@ -604,7 +613,7 @@ class ScenarioForm(QWidget):
             return ["scenario: document is missing"]
         errors: list[str] = []
         data["name"] = self.name.text()
-        data["craft"] = self._craft_name
+        data["craft"] = self._craft_file
         data["epoch"] = self.epoch.text().strip()
         data["frame"] = "heliocentric_ecliptic_j2000"
         bodies = data.get("bodies")

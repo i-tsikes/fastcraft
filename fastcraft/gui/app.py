@@ -233,7 +233,7 @@ class MainWindow(QMainWindow):
         self._craft_path = target
         self._craft_dirty = False
         self.craft_form.set_file_path(str(target))
-        self.scenario_form.set_craft_name(target.name)
+        self._sync_craft_row()
         self._remember(target)
         self._retitle()
         self._refresh_status()
@@ -266,9 +266,10 @@ class MainWindow(QMainWindow):
     def _load_startup_craft(self) -> None:
         path = find_default_craft()
         if path is None:
+            self._craft_path = None
             self.craft_form.load_data(new_craft())
             self.craft_form.set_file_path("")
-            self.scenario_form.set_craft_name("")
+            self._sync_craft_row()
             self._startup_note = "default.craft.yaml was not found."
             return
         try:
@@ -295,17 +296,13 @@ class MainWindow(QMainWindow):
         self._set_craft(data, path)
 
     def _set_craft(self, data: Any, path: Path | None) -> None:
-        self.craft_form.load_data(data)
         self._craft_path = path
+        self.craft_form.load_data(data)
         self._craft_dirty = False
         if self._scenario_path is not None:
             self._scenario_dirty = True
-        if path is None:
-            self.craft_form.set_file_path("")
-            self.scenario_form.set_craft_name("")
-        else:
-            self.craft_form.set_file_path(str(path))
-            self.scenario_form.set_craft_name(path.name)
+        self.craft_form.set_file_path("" if path is None else str(path))
+        self._sync_craft_row()
         self.tabs.setCurrentWidget(self.craft_form)
         self._retitle()
         self._refresh_status()
@@ -314,8 +311,7 @@ class MainWindow(QMainWindow):
         self.scenario_form.load_data(data)
         self._scenario_path = path
         self._scenario_dirty = False
-        if self._craft_path is not None:
-            self.scenario_form.set_craft_name(self._craft_path.name)
+        self._sync_craft_row()
         self.tabs.setCurrentWidget(self.scenario_form)
         self._retitle()
         self._refresh_status()
@@ -547,8 +543,17 @@ class MainWindow(QMainWindow):
             return
         save_settings(dialog.settings())
 
+    def _sync_craft_row(self) -> None:
+        """Scenario row: the craft's name, then the loaded file name."""
+        filename = "" if self._craft_path is None else self._craft_path.name
+        if not filename:
+            self.scenario_form.set_loaded_craft("", "")
+            return
+        self.scenario_form.set_loaded_craft(self.craft_form.name.text(), filename)
+
     def _craft_edited(self) -> None:
         self._craft_dirty = True
+        self._sync_craft_row()
         self._refresh_status()
 
     def _scenario_edited(self) -> None:
