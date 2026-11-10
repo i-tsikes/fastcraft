@@ -407,7 +407,9 @@ class ScenarioForm(QWidget):
         self._filling = False
         self._refined: datetime | None = None
         self._craft_file = ""
-        self.name = QLineEdit()
+        self._scenario_title = ""
+        self._scenario_file = ""
+        self.name = QLabel("—")
         self.craft_name = QLabel("—")
         self.epoch = QLineEdit()
         self.sun = QCheckBox("sun")
@@ -521,7 +523,6 @@ class ScenarioForm(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(scroll)
         for widget in (
-            self.name,
             self.epoch,
             self.cargo,
             self.agl,
@@ -564,10 +565,29 @@ class ScenarioForm(QWidget):
             shown = "—"
         self.craft_name.setText(shown)
 
+    def set_scenario_file(self, filename: str) -> None:
+        """Show `Name (file.yaml)` beside the Name label. The document keeps the name."""
+        self._scenario_file = filename
+        self._refresh_scenario_name()
+
+    def _refresh_scenario_name(self) -> None:
+        name = self._scenario_title.strip()
+        filename = self._scenario_file
+        if name and filename:
+            shown = f"{name} ({filename})"
+        elif filename:
+            shown = filename
+        elif name:
+            shown = name
+        else:
+            shown = "—"
+        self.name.setText(shown)
+
     def load_data(self, data: Any) -> None:
         self._data = data
         self._filling = True
-        self.name.setText(str(data.get("name", "")))
+        self._scenario_title = str(data.get("name", "") or "")
+        self._refresh_scenario_name()
         self.epoch.setText(_epoch_text(data.get("epoch", "")))
         bodies = list(data.get("bodies", []))
         self.sun.setChecked("sun" in bodies)
@@ -612,7 +632,7 @@ class ScenarioForm(QWidget):
         if not isinstance(data, Mapping):
             return ["scenario: document is missing"]
         errors: list[str] = []
-        data["name"] = self.name.text()
+        data["name"] = self._scenario_title
         data["craft"] = self._craft_file
         data["epoch"] = self.epoch.text().strip()
         data["frame"] = "heliocentric_ecliptic_j2000"

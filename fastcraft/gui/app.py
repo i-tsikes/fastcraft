@@ -47,9 +47,18 @@ _RECENT_LIMIT = 8
 
 def find_default_craft() -> Path | None:
     """`default.craft.yaml` in the working directory, or beside a source checkout."""
+    return _find_default("default.craft.yaml")
+
+
+def find_default_scenario() -> Path | None:
+    """`default.scenario.yaml` in the working directory, or beside a source checkout."""
+    return _find_default("default.scenario.yaml")
+
+
+def _find_default(filename: str) -> Path | None:
     candidates = [
-        Path.cwd() / "default.craft.yaml",
-        Path(__file__).resolve().parents[2] / "default.craft.yaml",
+        Path.cwd() / filename,
+        Path(__file__).resolve().parents[2] / filename,
     ]
     seen: set[Path] = set()
     for path in candidates:
@@ -97,7 +106,6 @@ class MainWindow(QMainWindow):
         self._startup_note = ""
         self.craft_form = CraftForm()
         self.scenario_form = ScenarioForm()
-        self.scenario_form.load_data(new_scenario())
         self.craft_form.load_requested.connect(self._load_craft_request)
         self.craft_form.changed.connect(self._craft_edited)
         self.scenario_form.changed.connect(self._scenario_edited)
@@ -127,9 +135,7 @@ class MainWindow(QMainWindow):
         self._assistant.patch_ready.connect(self._apply_assistant_patch)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._assistant)
         self._build_menu()
-        self._load_startup_craft()
-        if self._craft_path is None:
-            self._refresh_status()
+        self._load_startup_documents()
         self._retitle()
 
     def open_path(self, path: Path) -> None:
@@ -258,10 +264,41 @@ class MainWindow(QMainWindow):
         dump_yaml(self.scenario_form.document(), target)
         self._scenario_path = target
         self._scenario_dirty = False
+        self.scenario_form.set_scenario_file(target.name)
         self._remember(target)
         self._retitle()
         self._refresh_status()
         return True
+
+    def _load_startup_documents(self) -> None:
+        """Load the default scenario, then the default craft, without marking either dirty."""
+        notes: list[str] = []
+        scenario_path = find_default_scenario()
+        scenario_data: Any = None
+        if scenario_path is None:
+            notes.append("default.scenario.yaml was not found.")
+            self.scenario_form.load_data(new_scenario())
+        else:
+            try:
+                scenario_data = load_yaml(scenario_path)
+            except DocumentError as exc:
+                notes.append(str(exc))
+                scenario_path = None
+                self.scenario_form.load_data(new_scenario())
+            else:
+                self.scenario_form.load_data(scenario_data)
+        self._load_startup_craft()
+        if scenario_path is not None and scenario_data is not None:
+            self._scenario_path = scenario_path
+            self._scenario_dirty = False
+            self.scenario_form.set_scenario_file(scenario_path.name)
+        else:
+            self.scenario_form.set_scenario_file("")
+        if self._startup_note:
+            notes.insert(0, self._startup_note)
+        self._startup_note = "\n".join(note for note in notes if note)
+        self.tabs.setCurrentWidget(self.craft_form)
+        self._refresh_status()
 
     def _load_startup_craft(self) -> None:
         path = find_default_craft()
@@ -311,6 +348,7 @@ class MainWindow(QMainWindow):
         self.scenario_form.load_data(data)
         self._scenario_path = path
         self._scenario_dirty = False
+        self.scenario_form.set_scenario_file("" if path is None else path.name)
         self._sync_craft_row()
         self.tabs.setCurrentWidget(self.scenario_form)
         self._retitle()
