@@ -121,11 +121,23 @@ class CraftForm(QWidget):
     """Editors for every craft field. Unknown keys are left untouched."""
 
     changed = Signal()
+    load_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._data: Any = None
         self._filling = False
+        self._shown_path = ""
+        self.file_path = QLineEdit()
+        self.file_path.setPlaceholderText("default.craft.yaml")
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._browse_file)
+        self.file_path.editingFinished.connect(self._finish_file_path)
+        file_row = QWidget()
+        file_layout = QHBoxLayout(file_row)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        file_layout.addWidget(self.file_path)
+        file_layout.addWidget(browse)
         self.name = QLineEdit()
         self.dry = QLineEdit()
         self.water = QLineEdit()
@@ -143,7 +155,7 @@ class CraftForm(QWidget):
         self.m_count = QLineEdit()
         self.m_thrust = QLineEdit()
         self.m_isp = QLineEdit()
-        self.oxygen_on = QCheckBox("Oxygen thrusters")
+        self.oxygen_on = QCheckBox("Oxygen Thrusters")
         self.o_count = QLineEdit()
         self.o_thrust = QLineEdit()
         self.o_isp = QLineEdit()
@@ -171,9 +183,9 @@ class CraftForm(QWidget):
         form.addRow("MHD thrust N", self.m_thrust)
         form.addRow("MHD Isp s", self.m_isp)
         form.addRow(self.oxygen_on)
-        form.addRow("Oxygen count", self.o_count)
-        form.addRow("Oxygen thrust N", self.o_thrust)
-        form.addRow("Oxygen Isp s", self.o_isp)
+        form.addRow("O2 thruster count", self.o_count)
+        form.addRow("O2 thruster thrust N", self.o_thrust)
+        form.addRow("O2 thruster Isp s", self.o_isp)
         form.addRow("Tank length m", self.length)
         form.addRow("Tank radius m", self.radius)
         form.addRow("Radiator span m", self.span)
@@ -188,9 +200,36 @@ class CraftForm(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(inner)
+        header = QFormLayout()
+        header.addRow("File", file_row)
         layout = QVBoxLayout(self)
+        layout.addLayout(header)
         layout.addWidget(scroll)
         self._sync_oxygen()
+
+    def set_file_path(self, text: str) -> None:
+        """Show the craft file that is loaded. Does not mark the document dirty."""
+        self._shown_path = text
+        self.file_path.blockSignals(True)
+        self.file_path.setText(text)
+        self.file_path.blockSignals(False)
+
+    def _finish_file_path(self) -> None:
+        text = self.file_path.text().strip()
+        if not text or text == self._shown_path:
+            return
+        self.load_requested.emit(text)
+
+    def _browse_file(self) -> None:
+        start = str(Path(self._shown_path).parent) if self._shown_path else str(Path.cwd())
+        path, _selected = QFileDialog.getOpenFileName(
+            self,
+            "Craft file",
+            start,
+            "Craft (*.craft.yaml *.yaml)",
+        )
+        if path:
+            self.load_requested.emit(path)
 
     def document(self) -> Any:
         return self._data
@@ -366,17 +405,12 @@ class ScenarioForm(QWidget):
         super().__init__(parent)
         self._data: Any = None
         self._filling = False
-        self._directory: Path | None = None
         self._refined: datetime | None = None
-        self.name = QLineEdit()
-        self.craft = QLineEdit()
-        browse = QPushButton("Browse…")
-        browse.clicked.connect(self._browse_craft)
-        craft_row = QWidget()
-        craft_layout = QHBoxLayout(craft_row)
-        craft_layout.setContentsMargins(0, 0, 0, 0)
-        craft_layout.addWidget(self.craft)
-        craft_layout.addWidget(browse)
+        self._craft_file = ""
+        self._scenario_title = ""
+        self._scenario_file = ""
+        self.name = QLabel("—")
+        self.craft_name = QLabel("—")
         self.epoch = QLineEdit()
         self.sun = QCheckBox("sun")
         self.earth = QCheckBox("earth")
@@ -427,7 +461,7 @@ class ScenarioForm(QWidget):
         self.accept_button.clicked.connect(self.accept_epoch_requested.emit)
         form = QFormLayout()
         form.addRow("Name", self.name)
-        form.addRow("Craft", craft_row)
+        form.addRow("Craft", self.craft_name)
         form.addRow("Epoch", self.epoch)
         form.addRow("Bodies", bodies)
         form.addRow("Ship", self.ship)
@@ -489,8 +523,6 @@ class ScenarioForm(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(scroll)
         for widget in (
-            self.name,
-            self.craft,
             self.epoch,
             self.cargo,
             self.agl,
@@ -519,14 +551,43 @@ class ScenarioForm(QWidget):
     def document(self) -> Any:
         return self._data
 
-    def set_directory(self, path: Path | None) -> None:
-        self._directory = path
+    def set_loaded_craft(self, craft_name: str, filename: str) -> None:
+        """Show `Name (file.yaml)`. The scenario document keeps the filename."""
+        self._craft_file = filename
+        name = craft_name.strip()
+        if name and filename:
+            shown = f"{name} ({filename})"
+        elif filename:
+            shown = filename
+        elif name:
+            shown = name
+        else:
+            shown = "—"
+        self.craft_name.setText(shown)
+
+    def set_scenario_file(self, filename: str) -> None:
+        """Show `Name (file.yaml)` beside the Name label. The document keeps the name."""
+        self._scenario_file = filename
+        self._refresh_scenario_name()
+
+    def _refresh_scenario_name(self) -> None:
+        name = self._scenario_title.strip()
+        filename = self._scenario_file
+        if name and filename:
+            shown = f"{name} ({filename})"
+        elif filename:
+            shown = filename
+        elif name:
+            shown = name
+        else:
+            shown = "—"
+        self.name.setText(shown)
 
     def load_data(self, data: Any) -> None:
         self._data = data
         self._filling = True
-        self.name.setText(str(data.get("name", "")))
-        self.craft.setText(str(data.get("craft", "")))
+        self._scenario_title = str(data.get("name", "") or "")
+        self._refresh_scenario_name()
         self.epoch.setText(_epoch_text(data.get("epoch", "")))
         bodies = list(data.get("bodies", []))
         self.sun.setChecked("sun" in bodies)
@@ -571,8 +632,8 @@ class ScenarioForm(QWidget):
         if not isinstance(data, Mapping):
             return ["scenario: document is missing"]
         errors: list[str] = []
-        data["name"] = self.name.text()
-        data["craft"] = self.craft.text().strip()
+        data["name"] = self._scenario_title
+        data["craft"] = self._craft_file
         data["epoch"] = self.epoch.text().strip()
         data["frame"] = "heliocentric_ecliptic_j2000"
         bodies = data.get("bodies")
@@ -700,26 +761,6 @@ class ScenarioForm(QWidget):
 
     def take_refined(self) -> datetime | None:
         return self._refined
-
-    def _browse_craft(self) -> None:
-        path, _selected = QFileDialog.getOpenFileName(
-            self,
-            "Craft file",
-            str(self._directory or Path.cwd()),
-            "Craft (*.craft.yaml *.yaml)",
-        )
-        if not path:
-            return
-        chosen = Path(path)
-        base = self._directory
-        if base is not None:
-            try:
-                relative = chosen.resolve().relative_to(base.resolve())
-                self.craft.setText(relative.as_posix())
-                return
-            except ValueError:
-                pass
-        self.craft.setText(str(chosen))
 
     def _fill_modes(self, current: str) -> None:
         self.mode.blockSignals(True)
