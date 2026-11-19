@@ -1,0 +1,38 @@
+schema: fastcraft.scenario/v1
+name: Earth to Mars
+craft: hauler.craft.yaml
+epoch: 2035-04-01T00:00:00Z
+frame: heliocentric_ecliptic_j2000
+bodies:
+  - sun
+  - earth
+  - mars
+initial:
+  mode: earth_circular_equatorial
+  agl_m: 400000
+  longitude_deg: 0
+  propellant:
+    water_kg: 400000
+    lh2_kg: 30000
+    lox_kg: 240000
+arrival:
+  body: mars
+  agl_m: 400000
+ship: docked
+burns:
+  - role: departure
+    duration_s: 180
+    throttle: 1
+  - role: accelerate
+    duration_s: 3600
+    throttle: 1
+    oxygen: "off"
+  - role: decelerate
+    duration_s: 3600
+    throttle: 1
+    oxygen: "off"
+  - role: insertion
+    duration_s: 180
+    throttle: 1
+electrolysis: "off"
+notes: Short demonstration burns from a circular equatorial Earth orbit.
