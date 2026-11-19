@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,14 @@ from fastcraft.units import (
     SCENARIO_SCHEMA,
     body_mu,
     body_radius_m,
+)
+from fastcraft.validate import (
+    parse_iso_datetime,
+    parse_number,
+    parse_string,
+    parse_vector3,
+    reject_unknown,
+    require_mapping,
 )
 from fastcraft.yamlio import DocumentError, load_yaml
 
@@ -134,29 +142,29 @@ def parse_scenario(data: Any, *, source: Path | None, craft: Craft | None = None
     errors: list[str] = []
     if not isinstance(data, Mapping):
         raise DocumentError(["scenario document must be a mapping"])
-    _reject_unknown(data, _SCENARIO_FIELDS, "scenario", errors)
+    reject_unknown(data, _SCENARIO_FIELDS, "scenario", errors)
     if data.get("schema") != SCENARIO_SCHEMA:
         errors.append(f"schema: expected {SCENARIO_SCHEMA!r}")
-    name = _string(data.get("name"), "name", errors)
-    craft_rel = _string(data.get("craft"), "craft", errors)
-    epoch = _epoch(data.get("epoch"), errors)
-    frame = _string(data.get("frame"), "frame", errors)
+    name = parse_string(data.get("name"), "name", errors)
+    craft_rel = parse_string(data.get("craft"), "craft", errors)
+    epoch = parse_iso_datetime(data.get("epoch"), "epoch", errors)
+    frame = parse_string(data.get("frame"), "frame", errors)
     if frame and frame != FRAME:
         errors.append(f"frame: expected {FRAME!r}")
     bodies = _bodies(data.get("bodies"), errors)
     initial = _initial(data.get("initial"), errors)
     arrival = _arrival(data.get("arrival"), errors)
-    ship = _string(data.get("ship"), "ship", errors)
+    ship = parse_string(data.get("ship"), "ship", errors)
     if ship and ship not in _SHIPS:
         errors.append("ship: expected 'docked', 'none', 'empty', or 'loaded'")
     cargo = _cargo(data, ship, errors)
     burns = _burns(data.get("burns"), errors)
-    electrolysis = _string(data.get("electrolysis"), "electrolysis", errors)
+    electrolysis = parse_string(data.get("electrolysis"), "electrolysis", errors)
     if electrolysis and electrolysis not in ("on", "off"):
         errors.append("electrolysis: expected 'on' or 'off'")
     notes = ""
     if "notes" in data:
-        notes = _string(data.get("notes"), "notes", errors)
+        notes = parse_string(data.get("notes"), "notes", errors)
     craft_path = _resolve_craft(source, craft_rel) if craft_rel and source is not None else None
     loaded = craft
     if loaded is None and craft_path is not None:
@@ -287,13 +295,13 @@ def _initial(value: Any, errors: list[str]) -> Initial | None:
         )
         mode = "heliocentric"
     allowed = _HELIO_FIELDS if mode == "heliocentric" else _CIRCULAR_FIELDS
-    _reject_unknown(value, allowed, "initial", errors)
+    reject_unknown(value, allowed, "initial", errors)
     propellant = _propellant(value.get("propellant"), errors)
     if propellant is None:
         return None
     if mode == "heliocentric":
-        position = _vector(value.get("position_m"), "initial.position_m", errors)
-        velocity = _vector(value.get("velocity_m_per_s"), "initial.velocity_m_per_s", errors)
+        position = parse_vector3(value.get("position_m"), "initial.position_m", errors)
+        velocity = parse_vector3(value.get("velocity_m_per_s"), "initial.velocity_m_per_s", errors)
         if position is None or velocity is None:
             return None
         return HeliocentricInitial(
@@ -302,12 +310,12 @@ def _initial(value: Any, errors: list[str]) -> Initial | None:
             velocity_m_per_s=velocity,
             propellant=propellant,
         )
-    agl = _number(value.get("agl_m"), "initial.agl_m", errors, minimum=None)
+    agl = parse_number(value.get("agl_m"), "initial.agl_m", errors, minimum=None)
     if agl < MIN_AGL_M:
         errors.append(f"initial.agl_m must be at least {MIN_AGL_M:g} m")
     longitude = 0.0
     if "longitude_deg" in value:
-        longitude = _number(
+        longitude = parse_number(
             value.get("longitude_deg"), "initial.longitude_deg", errors, minimum=None
         )
     return CircularInitial(
@@ -319,14 +327,13 @@ def _initial(value: Any, errors: list[str]) -> Initial | None:
 
 
 def _arrival(value: Any, errors: list[str]) -> Arrival | None:
-    if not isinstance(value, Mapping):
-        errors.append("arrival: expected a mapping")
+    mapping = require_mapping(value, "arrival", _ARRIVAL_FIELDS, errors)
+    if mapping is None:
         return None
-    _reject_unknown(value, _ARRIVAL_FIELDS, "arrival", errors)
-    body = _string(value.get("body"), "arrival.body", errors)
+    body = parse_string(mapping.get("body"), "arrival.body", errors)
     if body and body not in ("earth", "mars"):
         errors.append("arrival.body: expected 'earth' or 'mars'")
-    agl = _number(value.get("agl_m"), "arrival.agl_m", errors, minimum=None)
+    agl = parse_number(mapping.get("agl_m"), "arrival.agl_m", errors, minimum=None)
     if agl < MIN_AGL_M:
         errors.append(f"arrival.agl_m must be at least {MIN_AGL_M:g} m")
     if not body:
@@ -335,14 +342,13 @@ def _arrival(value: Any, errors: list[str]) -> Arrival | None:
 
 
 def _propellant(value: Any, errors: list[str]) -> Propellant | None:
-    if not isinstance(value, Mapping):
-        errors.append("initial.propellant: expected a mapping")
+    mapping = require_mapping(value, "initial.propellant", _PROPELLANT_FIELDS, errors)
+    if mapping is None:
         return None
-    _reject_unknown(value, _PROPELLANT_FIELDS, "initial.propellant", errors)
     return Propellant(
-        water_kg=_number(value.get("water_kg"), "initial.propellant.water_kg", errors),
-        lh2_kg=_number(value.get("lh2_kg"), "initial.propellant.lh2_kg", errors),
-        lox_kg=_number(value.get("lox_kg"), "initial.propellant.lox_kg", errors),
+        water_kg=parse_number(mapping.get("water_kg"), "initial.propellant.water_kg", errors),
+        lh2_kg=parse_number(mapping.get("lh2_kg"), "initial.propellant.lh2_kg", errors),
+        lox_kg=parse_number(mapping.get("lox_kg"), "initial.propellant.lox_kg", errors),
     )
 
 
@@ -373,16 +379,16 @@ def _burn(value: Any, index: int, expected: str, errors: list[str]) -> Burn | No
     role = value.get("role")
     mhd = expected in ("accelerate", "decelerate")
     allowed = _BURN_OXYGEN if mhd else _BURN_COMMON
-    _reject_unknown(value, allowed, where, errors)
+    reject_unknown(value, allowed, where, errors)
     if role != expected:
         errors.append(f"{where}.role: expected {expected!r}")
-    duration = _number(value.get("duration_s"), f"{where}.duration_s", errors)
-    throttle = _number(value.get("throttle"), f"{where}.throttle", errors, minimum=None)
+    duration = parse_number(value.get("duration_s"), f"{where}.duration_s", errors)
+    throttle = parse_number(value.get("throttle"), f"{where}.throttle", errors, minimum=None)
     if throttle < 0.0 or throttle > 1.0:
         errors.append(f"{where}.throttle must be from 0 to 1")
     oxygen: str | None = None
     if mhd:
-        oxygen = _string(value.get("oxygen"), f"{where}.oxygen", errors)
+        oxygen = parse_string(value.get("oxygen"), f"{where}.oxygen", errors)
         if oxygen and oxygen not in ("auto", "off"):
             errors.append(f"{where}.oxygen: expected 'auto' or 'off'")
     elif "oxygen" in value:
@@ -417,77 +423,10 @@ def _cargo(data: Mapping[str, Any], ship: str, errors: list[str]) -> float:
         if not present:
             errors.append("cargo_kg is required when ship is 'loaded'")
             return 0.0
-        return _number(data.get("cargo_kg"), "cargo_kg", errors)
+        return parse_number(data.get("cargo_kg"), "cargo_kg", errors)
     if present:
         errors.append("cargo_kg is only allowed when ship is 'loaded'")
     return 0.0
-
-
-def _epoch(value: Any, errors: list[str]) -> datetime | None:
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, str):
-        text = value.replace("Z", "+00:00")
-        try:
-            parsed = datetime.fromisoformat(text)
-        except ValueError:
-            errors.append("epoch: expected an ISO-8601 UTC time")
-            return None
-    else:
-        errors.append("epoch: expected an ISO-8601 UTC time")
-        return None
-    if parsed.tzinfo is None:
-        errors.append("epoch: time zone is required")
-        return None
-    return parsed.astimezone(UTC)
-
-
-def _vector(
-    value: Any,
-    where: str,
-    errors: list[str],
-) -> tuple[float, float, float] | None:
-    if not isinstance(value, list) or len(value) != 3:
-        errors.append(f"{where}: expected a list of three numbers")
-        return None
-    numbers = [
-        _number(item, f"{where}[{index}]", errors, minimum=None) for index, item in enumerate(value)
-    ]
-    return (numbers[0], numbers[1], numbers[2])
-
-
-def _number(
-    value: Any,
-    where: str,
-    errors: list[str],
-    *,
-    minimum: float | None = 0.0,
-) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        errors.append(f"{where}: expected a number")
-        return 0.0
-    number = float(value)
-    if minimum is not None and number < minimum:
-        errors.append(f"{where}: must be >= {minimum:g}")
-    return number
-
-
-def _string(value: Any, where: str, errors: list[str]) -> str:
-    if not isinstance(value, str):
-        errors.append(f"{where}: expected a string")
-        return ""
-    return value
-
-
-def _reject_unknown(
-    data: Mapping[str, Any],
-    allowed: set[str],
-    where: str,
-    errors: list[str],
-) -> None:
-    for key in data:
-        if str(key) not in allowed:
-            errors.append(f"{where}: unknown field {key!r}")
 
 
 # Imported for the mixture comment readers and preset code.
