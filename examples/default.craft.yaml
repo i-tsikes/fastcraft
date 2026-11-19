@@ -1,0 +1,32 @@
+schema: fastcraft.craft/v1
+name: Hauler
+# Dry mass is one number. It excludes tanks and the docked Starship.
+dry_mass_kg: 150000
+tanks:
+  water_kg: 400000
+  lh2_kg: 30000
+  lox_kg: 240000
+starship:
+  dry_mass_kg: 85000
+  # Reserved for landing. The Hauler never burns this.
+  landing_propellant_kg: 120000
+power:
+  reactor_thermal_w: 1.0e9
+  electric_w: 2.0e8
+  radiator_reject_w: 8.0e8
+electrolysis:
+  max_kg_per_s: 0.5
+engines:
+  hydrolox:
+    count: 4
+    thrust_n: 2.2e6
+    isp_s: 380
+  mhd:
+    count: 9
+    thrust_n: 250
+    isp_s: 3000
+geometry:
+  tank_length_m: 50
+  tank_radius_m: 4.5
+  radiator_span_m: 40
+notes: Water-fueled nuclear hauler. Starship docks on the forward face.

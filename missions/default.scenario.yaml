@@ -1,0 +1,38 @@
+schema: fastcraft.scenario/v1
+name: Earth to Mars
+craft: "/home/tsikes/dev/ai/fastcraft/examples/hauler.craft.yaml"
+epoch: '2035-04-01T00:00:00Z'
+frame: heliocentric_ecliptic_j2000
+bodies:
+- sun
+- earth
+- mars
+initial:
+  mode: earth_circular_equatorial
+  agl_m: 400000.0
+  longitude_deg: 0.0
+  propellant:
+    water_kg: 400000.0
+    lh2_kg: 30000.0
+    lox_kg: 240000.0
+arrival:
+  body: mars
+  agl_m: 400000.0
+ship: docked
+burns:
+- role: departure
+  duration_s: 180.0
+  throttle: 0.65
+- role: accelerate
+  duration_s: 3600.0
+  throttle: 1.0
+  oxygen: "off"
+- role: decelerate
+  duration_s: 3600.0
+  throttle: 1.0
+  oxygen: "off"
+- role: insertion
+  duration_s: 180.0
+  throttle: 1.0
+electrolysis: "on"
+notes: Outbound from a circular equatorial Earth orbit. Starship stays docked.

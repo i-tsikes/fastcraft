@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from fastcraft.yamlio import dump_yaml, load_yaml
 
@@ -13,17 +14,29 @@ DEFAULT_MODEL = "openai/gpt-4o-mini"
 _LOCAL_NAME = "fastcraft.settings.yaml"
 
 
-@dataclass(frozen=True)
-class Settings:
-    model: str = DEFAULT_MODEL
-    api_key: str = ""
-    kernel: str = ""
+class Settings(BaseModel):
+    """Application settings with validation."""
+
+    model: str = Field(default=DEFAULT_MODEL, description="OpenRouter model identifier")
+    api_key: str = Field(default="", description="OpenRouter API key (env var takes precedence)")
+    kernel: str = Field(default="", description="Path to JPL DE kernel (.bsp)")
 
     def resolved_api_key(self) -> str:
+        """Return the API key, preferring the environment variable."""
         env = os.environ.get("OPENROUTER_API_KEY", "")
         if env:
             return env
         return self.api_key
+
+    @field_validator("model")
+    @classmethod
+    def _non_empty_model(cls, v: str) -> str:
+        return v.strip() or DEFAULT_MODEL
+
+    @field_validator("kernel")
+    @classmethod
+    def _expand_kernel_path(cls, v: str) -> str:
+        return v.strip()
 
 
 def settings_path() -> Path:
@@ -44,25 +57,16 @@ def load_settings() -> Settings:
             loaded = load_yaml(path)
             if isinstance(loaded, dict):
                 data.update(loaded)
-    model = data.get("model", DEFAULT_MODEL)
-    api_key = data.get("api_key", "")
-    kernel = data.get("kernel", "")
-    return Settings(
-        model=str(model) if model else DEFAULT_MODEL,
-        api_key=str(api_key) if api_key else "",
-        kernel=str(kernel) if kernel else "",
-    )
+    return Settings.model_validate(data)
 
 
 def save_settings(settings: Settings) -> Path:
     """Write settings to the user config directory, not the repository."""
     path = settings_path()
-    payload: dict[str, Any] = {
-        "model": settings.model,
-        "kernel": settings.kernel,
-    }
-    if settings.api_key:
-        payload["api_key"] = settings.api_key
+    payload = settings.model_dump(exclude_none=True)
+    # Don't persist empty api_key; env var takes precedence
+    if not payload.get("api_key"):
+        payload.pop("api_key", None)
     dump_yaml(payload, path)
     return path
 
@@ -73,3 +77,15 @@ def kernel_path() -> Path | None:
     if not text:
         return None
     return Path(text).expanduser()
+
+
+# For type hints in other modules that import the old dataclass
+__all__ = [
+    "Settings",
+    "DEFAULT_MODEL",
+    "settings_path",
+    "project_settings_path",
+    "load_settings",
+    "save_settings",
+    "kernel_path",
+]

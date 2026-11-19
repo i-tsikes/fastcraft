@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from fastcraft.units import CRAFT_SCHEMA
+from fastcraft.validate import (
+    parse_integer,
+    parse_number,
+    parse_string,
+    reject_unknown,
+    require_mapping,
+)
 from fastcraft.yamlio import DocumentError, load_yaml
 
 _CRAFT_FIELDS = {
@@ -138,18 +145,18 @@ def parse_craft(data: Any) -> Craft:
     errors: list[str] = []
     if not isinstance(data, Mapping):
         raise DocumentError(["craft document must be a mapping"])
-    _reject_unknown(data, _CRAFT_FIELDS, "craft", errors)
+    reject_unknown(data, _CRAFT_FIELDS, "craft", errors)
     if data.get("schema") != CRAFT_SCHEMA:
         errors.append(f"schema: expected {CRAFT_SCHEMA!r}")
-    name = _string(data.get("name"), "name", errors)
-    dry = _number(data.get("dry_mass_kg"), "dry_mass_kg", errors)
+    name = parse_string(data.get("name"), "name", errors)
+    dry = parse_number(data.get("dry_mass_kg"), "dry_mass_kg", errors)
     tanks = _tanks(data.get("tanks"), errors)
     starship = _starship(data.get("starship"), errors)
     power = _power(data.get("power"), errors)
     electrolysis = _electrolysis(data.get("electrolysis"), errors)
     engines = _engines(data.get("engines"), errors)
     geometry = _geometry(data.get("geometry"), errors)
-    notes = _string(data.get("notes"), "notes", errors)
+    notes = parse_string(data.get("notes"), "notes", errors)
     if power is not None:
         if power.electric_w >= power.reactor_thermal_w:
             errors.append("power.electric_w must be below power.reactor_thermal_w")
@@ -175,23 +182,23 @@ def parse_craft(data: Any) -> Craft:
 
 
 def _tanks(value: Any, errors: list[str]) -> Tanks | None:
-    mapping = _mapping(value, "tanks", _TANK_FIELDS, errors)
+    mapping = require_mapping(value, "tanks", _TANK_FIELDS, errors)
     if mapping is None:
         return None
     return Tanks(
-        water_kg=_number(mapping.get("water_kg"), "tanks.water_kg", errors),
-        lh2_kg=_number(mapping.get("lh2_kg"), "tanks.lh2_kg", errors),
-        lox_kg=_number(mapping.get("lox_kg"), "tanks.lox_kg", errors),
+        water_kg=parse_number(mapping.get("water_kg"), "tanks.water_kg", errors),
+        lh2_kg=parse_number(mapping.get("lh2_kg"), "tanks.lh2_kg", errors),
+        lox_kg=parse_number(mapping.get("lox_kg"), "tanks.lox_kg", errors),
     )
 
 
 def _starship(value: Any, errors: list[str]) -> Starship | None:
-    mapping = _mapping(value, "starship", _STARSHIP_FIELDS, errors)
+    mapping = require_mapping(value, "starship", _STARSHIP_FIELDS, errors)
     if mapping is None:
         return None
     return Starship(
-        dry_mass_kg=_number(mapping.get("dry_mass_kg"), "starship.dry_mass_kg", errors),
-        landing_propellant_kg=_number(
+        dry_mass_kg=parse_number(mapping.get("dry_mass_kg"), "starship.dry_mass_kg", errors),
+        landing_propellant_kg=parse_number(
             mapping.get("landing_propellant_kg"),
             "starship.landing_propellant_kg",
             errors,
@@ -200,15 +207,15 @@ def _starship(value: Any, errors: list[str]) -> Starship | None:
 
 
 def _power(value: Any, errors: list[str]) -> Power | None:
-    mapping = _mapping(value, "power", _POWER_FIELDS, errors)
+    mapping = require_mapping(value, "power", _POWER_FIELDS, errors)
     if mapping is None:
         return None
     return Power(
-        reactor_thermal_w=_number(
+        reactor_thermal_w=parse_number(
             mapping.get("reactor_thermal_w"), "power.reactor_thermal_w", errors
         ),
-        electric_w=_number(mapping.get("electric_w"), "power.electric_w", errors),
-        radiator_reject_w=_number(
+        electric_w=parse_number(mapping.get("electric_w"), "power.electric_w", errors),
+        radiator_reject_w=parse_number(
             mapping.get("radiator_reject_w"),
             "power.radiator_reject_w",
             errors,
@@ -217,16 +224,16 @@ def _power(value: Any, errors: list[str]) -> Power | None:
 
 
 def _electrolysis(value: Any, errors: list[str]) -> Electrolysis | None:
-    mapping = _mapping(value, "electrolysis", _ELECTROLYSIS_FIELDS, errors)
+    mapping = require_mapping(value, "electrolysis", _ELECTROLYSIS_FIELDS, errors)
     if mapping is None:
         return None
     return Electrolysis(
-        max_kg_per_s=_number(mapping.get("max_kg_per_s"), "electrolysis.max_kg_per_s", errors)
+        max_kg_per_s=parse_number(mapping.get("max_kg_per_s"), "electrolysis.max_kg_per_s", errors)
     )
 
 
 def _engines(value: Any, errors: list[str]) -> Engines | None:
-    mapping = _mapping(value, "engines", _ENGINES_FIELDS, errors)
+    mapping = require_mapping(value, "engines", _ENGINES_FIELDS, errors)
     if mapping is None:
         return None
     hydrolox = _engine(mapping.get("hydrolox"), "engines.hydrolox", errors)
@@ -240,77 +247,25 @@ def _engines(value: Any, errors: list[str]) -> Engines | None:
 
 
 def _engine(value: Any, where: str, errors: list[str]) -> Engine | None:
-    mapping = _mapping(value, where, _ENGINE_FIELDS, errors)
+    mapping = require_mapping(value, where, _ENGINE_FIELDS, errors)
     if mapping is None:
         return None
-    count = _integer(mapping.get("count"), f"{where}.count", errors)
-    thrust = _number(mapping.get("thrust_n"), f"{where}.thrust_n", errors)
-    isp = _number(mapping.get("isp_s"), f"{where}.isp_s", errors)
+    count = parse_integer(mapping.get("count"), f"{where}.count", errors)
+    thrust = parse_number(mapping.get("thrust_n"), f"{where}.thrust_n", errors)
+    isp = parse_number(mapping.get("isp_s"), f"{where}.isp_s", errors)
     if count > 0 and thrust > 0.0 and isp <= 0.0:
         errors.append(f"{where}.isp_s must be positive when the engine can produce thrust")
     return Engine(count=count, thrust_n=thrust, isp_s=isp)
 
 
 def _geometry(value: Any, errors: list[str]) -> Geometry | None:
-    mapping = _mapping(value, "geometry", _GEOMETRY_FIELDS, errors)
+    mapping = require_mapping(value, "geometry", _GEOMETRY_FIELDS, errors)
     if mapping is None:
         return None
     return Geometry(
-        tank_length_m=_number(mapping.get("tank_length_m"), "geometry.tank_length_m", errors),
-        tank_radius_m=_number(mapping.get("tank_radius_m"), "geometry.tank_radius_m", errors),
-        radiator_span_m=_number(mapping.get("radiator_span_m"), "geometry.radiator_span_m", errors),
+        tank_length_m=parse_number(mapping.get("tank_length_m"), "geometry.tank_length_m", errors),
+        tank_radius_m=parse_number(mapping.get("tank_radius_m"), "geometry.tank_radius_m", errors),
+        radiator_span_m=parse_number(
+            mapping.get("radiator_span_m"), "geometry.radiator_span_m", errors
+        ),
     )
-
-
-def _mapping(
-    value: Any,
-    where: str,
-    allowed: set[str],
-    errors: list[str],
-) -> Mapping[str, Any] | None:
-    if not isinstance(value, Mapping):
-        errors.append(f"{where}: expected a mapping")
-        return None
-    _reject_unknown(value, allowed, where, errors)
-    return value
-
-
-def _reject_unknown(
-    data: Mapping[str, Any],
-    allowed: set[str],
-    where: str,
-    errors: list[str],
-) -> None:
-    for key in data:
-        if str(key) not in allowed:
-            errors.append(f"{where}: unknown field {key!r}")
-
-
-def _number(value: Any, where: str, errors: list[str]) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        errors.append(f"{where}: expected a number")
-        return 0.0
-    number = float(value)
-    if number < 0.0:
-        errors.append(f"{where}: must be >= 0")
-    return number
-
-
-def _integer(value: Any, where: str, errors: list[str]) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        errors.append(f"{where}: expected an integer")
-        return 0
-    if isinstance(value, float) and not value.is_integer():
-        errors.append(f"{where}: expected an integer")
-        return 0
-    number = int(value)
-    if number < 0:
-        errors.append(f"{where}: must be >= 0")
-    return number
-
-
-def _string(value: Any, where: str, errors: list[str]) -> str:
-    if not isinstance(value, str):
-        errors.append(f"{where}: expected a string")
-        return ""
-    return value
