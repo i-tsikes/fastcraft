@@ -8,6 +8,7 @@ craft and scenario YAML files must round-trip comments via ruamel.yaml.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 
@@ -101,9 +102,9 @@ def parse_vector3(
     return (nums[0], nums[1], nums[2])
 
 
-def parse_iso_datetime(value: Any, where: str, errors: list[str]) -> Any:
+def parse_iso_datetime(value: Any, where: str, errors: list[str]) -> datetime | None:
     """Parse an ISO-8601 UTC datetime string. Returns None on failure."""
-    from datetime import UTC, datetime
+    from datetime import UTC
 
     if isinstance(value, datetime):
         parsed = value
